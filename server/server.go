@@ -3,8 +3,8 @@ package main
 import (
 	"bufio"
 	"flag"
-	"net"
 	"fmt"
+	"net"
 )
 
 type Message struct {
@@ -13,14 +13,20 @@ type Message struct {
 }
 
 func handleError(err error) {
-	// TODO: all
-	// Deal with an error event.
+	if err != nil {
+		fmt.Println("error")
+	}
 }
 
 func acceptConns(ln net.Listener, conns chan net.Conn) {
 	// TODO: all
 	// Continuously accept a network connection from the Listener
 	// and add it to the channel for handling connections.
+	for {
+		conn, err := ln.Accept()
+		handleError(err)
+		conns <- conn
+	}
 }
 
 func handleClient(client net.Conn, clientid int, msgs chan Message) {
@@ -29,6 +35,15 @@ func handleClient(client net.Conn, clientid int, msgs chan Message) {
 	// Read in new messages as delimited by '\n's
 	// Tidy up each message and add it to the messages channel,
 	// recording which client it came from.
+	reader := bufio.NewReader(client)
+	for {
+		msg, err := reader.ReadString('\n')
+		if err != nil {
+			break
+		}
+		msgs <- Message{sender: clientid, message: msg}
+	}
+
 }
 
 func main() {
@@ -38,7 +53,7 @@ func main() {
 	flag.Parse()
 
 	//TODO Create a Listener for TCP connections on the port given above.
-
+	ln, _ := net.Listen("tcp", *portPtr)
 	//Create a channel for connections
 	conns := make(chan net.Conn)
 	//Create a channel for messages
@@ -46,11 +61,17 @@ func main() {
 	//Create a mapping of IDs to connections
 	clients := make(map[int]net.Conn)
 
+	n := 0
 	//Start accepting connections
 	go acceptConns(ln, conns)
 	for {
 		select {
 		case conn := <-conns:
+			client := conn
+			clients[n] = conn
+			go handleClient(client, n, msgs)
+			n++
+
 			//TODO Deal with a new connection
 			// - assign a client ID
 			// - add the client to the clients map
@@ -58,6 +79,11 @@ func main() {
 		case msg := <-msgs:
 			//TODO Deal with a new message
 			// Send the message to all clients that aren't the sender
+			for i, client := range clients {
+				if msg.sender != i {
+					fmt.Fprintf(client, msg.message)
+				}
+			}
 		}
 	}
 }
